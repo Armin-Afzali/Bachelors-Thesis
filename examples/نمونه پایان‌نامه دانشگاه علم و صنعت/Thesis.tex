@@ -1,0 +1,57 @@
+\documentclass[twoside]{report}
+
+\newcommand{\RootPath}{../../../}
+\newcommand{\MyPath}{\RootPath Boostan/tex/}
+
+\usepackage{adjustbox}
+\usepackage{ptext}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+
+\input{\MyPath Boostan-Thesis}
+
+\input{./ETC/words}
+\input{./ETC/abbre}
+
+\title{اجماع سبک برای یادگیری فدرال سریع و دقیق تحت ناهمگونی محاسباتی و شبکه‌ای}
+\faculity{مهندسی کامپیوتر}
+\author{آرمین افضلی}
+\forwhat{پایان‌نامه کارشناسی}
+\field{در رشته‌ مهندسی کامپیوتر}
+\logofile{Logo/Fa}
+\logoScale{0.25\linewidth}
+\supervisor{دکتر مهرداد آشتیانی}
+\date{خرداد ۱۴۰۵}
+
+\graphicspath{{./Pic/}}
+
+\begin{document}
+\pagenumbering{gobble}
+\thesisStyleO
+\newpage
+\Godpage
+\newpage
+\input{./ETC/sign}
+\input{Chapters/Abstract}
+
+\clearpage
+\pagenumbering{alph}
+\tableofcontents
+\listoffigures
+\listoftables
+\printabbreviation
+\pagenumbering{arabic}
+
+\pagestyle{mystyle}
+\input{Chapters/Introduction}
+\input{Chapters/Concepts}
+\input{Chapters/RelatedWorks}
+\input{Chapters/Approach}
+\input{Chapters/Simulation}
+\input{Chapters/Conclusion}
+
+\bibliography{ETC/library.bib}
+\printglossary
+\printindex
+
+\end{document}

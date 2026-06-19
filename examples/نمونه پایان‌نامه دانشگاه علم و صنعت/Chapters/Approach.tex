@@ -1,0 +1,401 @@
+\chapter{شرح روش پیشنهادی}
+\label{chap:approach}
+
+در این فصل، روش پیشنهادی این پژوهش یعنی \gls{TWAC} به‌تفصیل تشریح می‌شود. ابتدا در \autoref{sec:systemmodel}، مدل سامانه و فرضیات مسئله بیان می‌گردد. سپس در \autoref{sec:proposedapproach}، الگوریتم پیشنهادی در چهار گام اصلی شرح داده می‌شود. در \autoref{sec:trust_update}، مکانیزم به‌روزرسانی امتیاز اعتماد به‌صورت دقیق‌تر بررسی می‌گردد. در \autoref{sec:straggler_handling}، نحوه مدیریت گره‌های کُند توضیح داده می‌شود. در \autoref{sec:complexity}، پیچیدگی محاسباتی و مقایسه آن با روش‌های موجود ارائه می‌گردد و در نهایت در \autoref{sec:innovation_discussion}، نوآوری روش پیشنهادی در مقایسه با کارهای پیشین مورد بحث قرار می‌گیرد.
+
+\section{مدل سامانه و فرضیات}
+\label{sec:systemmodel}
+
+\subsection{توصیف محیط}
+
+سامانه مورد بررسی شامل یک سرور مرکزی (مرکز تجمیع) و $N$ گره شرکت‌کننده است که در یک محیط ابری چندگانه مستقر هستند. هر گره $i \in [N] = \{1, 2, \ldots, N\}$ دارای ویژگی‌های زیر است:
+
+\begin{itemize}
+    \tick \textbf{داده محلی}: هر گره مجموعه داده $\mathcal{D}_i$ را در اختیار دارد که از نمونه‌های $(x, y)$ تشکیل شده است. این داده‌ها هرگز مستقیماً به اشتراک گذاشته نمی‌شوند.
+    
+    \tick \textbf{سرعت محاسباتی}: هر گره دارای سرعت محاسباتی نسبی $s_i \in (0, 1]$ است که منعکس‌کننده توان پردازشی نمونه ابری آن است.
+    
+    \tick \textbf{مشخصات شبکه}: هر گره از نظر تأخیر و پهنای باند ارتباطی با سرور متفاوت است.
+    
+    \tick \textbf{رفتار}: هر گره یا صادق است (به‌روزرسانی واقعی ارسال می‌کند) یا مخرب (به‌روزرسانی دست‌کاری‌شده ارسال می‌کند). $f < N/2$ تعداد گره‌های مخرب است.
+\end{itemize}
+
+\begin{table}[t]
+    \centering
+    \renewcommand{\arraystretch}{1.8}
+    \caption{فهرست نمادهای استفاده‌شده در این فصل}
+    \label{tab:symbols}
+    \begin{tabular}{cp{11cm}}
+        \toprule
+        \textbf{نماد} & \textbf{توضیحات} \\
+        \midrule
+        $N$ & تعداد کل گره‌های شرکت‌کننده \\
+        $K$ & تعداد گره‌های انتخاب‌شده در هر دور \\
+        $f$ & تعداد گره‌های مخرب \\
+        $T$ & تعداد کل دورهای ارتباطی \\
+        $t$ & شماره دور جاری \\
+        $w^t$ & پارامترهای مدل سراسری در دور $t$ \\
+        $w_i^t$ & پارامترهای مدل محلی گره $i$ پس از آموزش در دور $t$ \\
+        $\Delta_i^t$ & به‌روزرسانی گره $i$ در دور $t$، برابر $w_i^t - w^t$ \\
+        $\tau_i^t$ & امتیاز اعتماد گره $i$ در دور $t$ \\
+        $\bar{\Delta}^t$ & جهت مرجع، میانگین متحرک نمایی به‌روزرسانی‌های تجمیع‌شده \\
+        $S_t$ & مجموعه گره‌های انتخاب‌شده در دور $t$ \\
+        $R_t \subseteq S_t$ & مجموعه گره‌هایی که در دور $t$ پاسخ دادند \\
+        $\gamma$ & پارامتر اینرسی امتیاز اعتماد (ضریب \gls{EMA}) \\
+        $\alpha$ & ضریب حساسیت مؤلفه بزرگی \\
+        $\beta$ & آستانه تحمل بزرگی (مضربی از میانه) \\
+        $\mu$ & پارامتر اینرسی جهت مرجع \\
+        $\tau_{\min}$ & حداقل امتیاز اعتماد مجاز (کف اعتماد) \\
+        $\delta$ & ضریب کاهش امتیاز گره‌های کُند \\
+        $n_i$ & تعداد نمونه‌های داده گره $i$ \\
+        $d$ & تعداد پارامترهای مدل \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\subsection{فرضیات مسئله}
+
+روش پیشنهادی بر پایه فرضیات زیر طراحی شده است:
+
+\begin{itemize}
+    \tick سرور کاملاً قابل اعتماد است و آسیب‌پذیری ندارد.
+    
+    \tick گره‌های مخرب می‌توانند هر به‌روزرسانی دلخواهی ارسال کنند، اما نمی‌توانند پیام‌های گره‌های دیگر را جعل کنند.
+    
+    \tick کانال ارتباطی میان سرور و گره‌ها احراز هویت‌شده است (یعنی سرور می‌داند کدام پیام از کدام گره آمده است).
+    
+    \tick تعداد گره‌های مخرب $f$ کمتر از نصف تعداد گره‌های شرکت‌کننده در هر دور است: $f < K/2$.
+    
+    \tick گره‌های صادق توزیع داده غیریکنواخت دارند، اما گرادیان‌هایشان در جهت کلی یادگیری همراستا هستند.
+\end{itemize}
+
+\begin{note}
+    فرض آخر کلید طراحی مؤلفه همسویی جهتی در \gls{TWAC} است. در توزیع \gls{NonIID}، گرادیان‌های گره‌های صادق ممکن است از نظر بزرگی و دقیقاً از نظر جهت متفاوت باشند، اما اگر همه گره‌ها در حال یادگیری یک مدل مشترک هستند، جهت کلی به‌روزرسانی‌هایشان باید تا حدی همراستا باشد. گره‌های مخرب با حمله جهت‌معکوس‌سازی این همراستایی را می‌شکنند.
+\end{note}
+
+
+\section{تشریح روش پیشنهادی}
+\label{sec:proposedapproach}
+
+روش \gls{TWAC} از چهار گام اصلی تشکیل شده است که در هر دور ارتباطی اجرا می‌شوند.
+
+\subsection{گام اول: انتخاب گره و ارسال مدل}
+
+در ابتدای هر دور $t$، سرور زیرمجموعه‌ای از گره‌ها $S_t$ با اندازه $K$ را به‌صورت تصادفی یکنواخت از میان $N$ گره انتخاب می‌کند و مدل سراسری $w^t$ را به آن‌ها ارسال می‌کند.
+
+\subsection{گام دوم: آموزش محلی و دریافت به‌روزرسانی‌ها}
+
+هر گره $i \in S_t$ پس از دریافت $w^t$، فرایند آموزش محلی را برای $E$ دوره اجرا می‌کند:
+
+\begin{equation}
+    w_i^{t, e+1} = w_i^{t, e} - \eta \nabla F_i(w_i^{t, e}; \xi_i^e)
+    \label{eq:local_update}
+\end{equation}
+
+که در آن $\xi_i^e$ یک دسته تصادفی از داده‌های محلی گره $i$ است. پس از اتمام آموزش محلی، گره به‌روزرسانی زیر را به سرور ارسال می‌کند:
+
+\begin{equation}
+    \Delta_i^t = w_i^{t, E} - w^t
+    \label{eq:delta}
+\end{equation}
+
+سرور تا یک زمان مهلت $T_{\max}$ منتظر می‌ماند و مجموعه گره‌هایی که پاسخ دادند را $R_t \subseteq S_t$ می‌نامد.
+
+\subsection{گام سوم: محاسبه امتیازات اعتماد}
+
+این گام قلب روش \gls{TWAC} است. برای هر گره $i \in R_t$، دو مؤلفه زیر محاسبه می‌شوند:
+
+\subsubsection{مؤلفه اول: همسویی جهتی}
+
+این مؤلفه، شباهت کسینوسی بین به‌روزرسانی گره $i$ و جهت مرجع $\bar{\Delta}^{t-1}$ را اندازه می‌گیرد:
+
+\begin{equation}
+    c_i^t = \frac{\langle \Delta_i^t, \bar{\Delta}^{t-1} \rangle}{\|\Delta_i^t\| \cdot \|\bar{\Delta}^{t-1}\| + \epsilon}
+    \label{eq:cosine}
+\end{equation}
+
+که در آن $\epsilon > 0$ یک عدد کوچک برای پایداری عددی است. این مقدار در بازه $[-1, 1]$ است. اگر $c_i^t$ منفی باشد، یعنی گره $i$ به‌روزرسانی‌ای در جهت مخالف مسیر یادگیری ارسال کرده که نشانه‌ای قوی از حمله جهت‌معکوس‌سازی است.
+
+\begin{nttheorem}
+\label{theorem:direction}
+    اگر گره $i$ یک گره مخرب با حمله جهت‌معکوس‌سازی باشد، آنگاه $c_i^t < 0$ با احتمال زیاد برقرار است.
+\end{nttheorem}
+
+\begin{proof}
+    فرض کنید گره $i$ به‌روزرسانی $\tilde{\Delta}_i^t = -\lambda \Delta_i^t$ را ارسال می‌کند. آنگاه:
+    \begin{equation*}
+        c_i^t = \frac{\langle -\lambda \Delta_i^t, \bar{\Delta}^{t-1} \rangle}{\|\lambda \Delta_i^t\| \cdot \|\bar{\Delta}^{t-1}\|} = -\lambda \cdot \frac{\langle \Delta_i^t, \bar{\Delta}^{t-1} \rangle}{\|\Delta_i^t\| \cdot \|\bar{\Delta}^{t-1}\|}
+    \end{equation*}
+    از آنجا که $\lambda > 0$ و $\Delta_i^t$ به‌روزرسانی یک گره صادق است که تمایل به همراستایی با $\bar{\Delta}^{t-1}$ دارد، حاصل منفی خواهد شد.
+\end{proof}
+
+\subsubsection{مؤلفه دوم: منطقی‌بودن بزرگی}
+
+این مؤلفه، بزرگی نرم به‌روزرسانی گره $i$ را نسبت به میانه بزرگی به‌روزرسانی‌های همه گره‌های پاسخ‌داده‌شده در نظر می‌گیرد:
+
+\begin{equation}
+    m_i^t = \exp\left(-\alpha \cdot \max\left(0, \frac{\|\Delta_i^t\|}{\text{median}_{j \in R_t}(\|\Delta_j^t\|)} - \beta\right)\right)
+    \label{eq:magnitude}
+\end{equation}
+
+که در آن $\alpha > 0$ ضریب حساسیت و $\beta > 1$ آستانه تحمل است. این مؤلفه به گونه‌ای طراحی شده که:
+\begin{itemize}
+    \tick اگر نرم به‌روزرسانی گره $i$ کمتر از $\beta$ برابر میانه باشد، $m_i^t \approx 1$ (جریمه‌ای ندارد).
+    \tick اگر نرم به‌روزرسانی بسیار بزرگ‌تر از میانه باشد، $m_i^t \to 0$ (جریمه سنگین).
+\end{itemize}
+
+استفاده از میانه به جای میانگین موجب می‌شود که این مؤلفه خود در برابر گره‌های مخرب مقاوم باشد.
+
+\begin{lemma}
+\label{lemma:magnitude}
+    در حضور حداکثر $f < |R_t|/2$ گره مخرب، میانه نرم به‌روزرسانی‌ها تخمین پایداری از نرم میانگین به‌روزرسانی‌های صادق است.
+\end{lemma}
+
+\begin{lemmaproof}
+    اگر کمتر از نصف گره‌های موجود در $R_t$ مخرب باشند، میانه مجموعه نرم‌ها همیشه در ناحیه‌ای قرار می‌گیرد که حداقل نیمی از عناصر آن متعلق به گره‌های صادق هستند. بنابراین میانه نمی‌تواند توسط گره‌های مخرب به سمت مقادیر دلخواه سوق داده شود.
+\end{lemmaproof}
+
+\subsubsection{امتیاز خام}
+
+امتیاز خام گره $i$ در دور $t$ از ترکیب دو مؤلفه فوق به‌دست می‌آید:
+
+\begin{equation}
+    s_i^t = \text{ReLU}(c_i^t) \cdot m_i^t
+    \label{eq:raw_score}
+\end{equation}
+
+عملگر $\text{ReLU}$ موجب می‌شود که به‌روزرسانی‌هایی با همسویی منفی امتیاز صفر بگیرند.
+
+\subsubsection{به‌روزرسانی امتیاز اعتماد}
+
+امتیاز اعتماد هر گره با استفاده از \gls{EMA} به‌روز می‌شود:
+
+\begin{equation}
+    \tau_i^t = \gamma \cdot \tau_i^{t-1} + (1 - \gamma) \cdot s_i^t
+    \label{eq:trust_update}
+\end{equation}
+
+که در آن $\gamma \in [0, 1)$ پارامتر اینرسی است. مقدار اولیه امتیاز اعتماد همه گره‌ها $\tau_i^0 = 1$ است.
+
+\subsection{گام چهارم: تجمیع وزن‌دار و به‌روزرسانی مدل}
+
+با استفاده از امتیازات اعتماد، مدل سراسری به‌روز می‌شود:
+
+\begin{equation}
+    w^{t+1} = w^t + \sum_{i \in R_t} \hat{w}_i^t \cdot \Delta_i^t
+    \label{eq:aggregation}
+\end{equation}
+
+که وزن‌های نرمال‌شده $\hat{w}_i^t$ به شکل زیر محاسبه می‌شوند:
+
+\begin{equation}
+    \hat{w}_i^t = \frac{\hat{\tau}_i^t \cdot n_i}{\sum_{j \in R_t} \hat{\tau}_j^t \cdot n_j}
+    \label{eq:weights}
+\end{equation}
+
+و $\hat{\tau}_i^t = \max(\tau_i^t, \tau_{\min})$ امتیاز اعتماد با کف است. کف اعتماد $\tau_{\min} > 0$ از محرومیت دائمی گره‌ها جلوگیری می‌کند.
+
+پس از به‌روزرسانی مدل، جهت مرجع نیز با \gls{EMA} به‌روز می‌شود:
+
+\begin{equation}
+    \bar{\Delta}^t = \mu \cdot \bar{\Delta}^{t-1} + (1 - \mu) \cdot \sum_{i \in R_t} \frac{\hat{\tau}_i^t}{\sum_{j \in R_t} \hat{\tau}_j^t} \cdot \Delta_i^t
+    \label{eq:reference_update}
+\end{equation}
+
+
+\section{مکانیزم به‌روزرسانی امتیاز اعتماد}
+\label{sec:trust_update}
+
+\subsection{رفتار در حضور حمله}
+
+رفتار امتیاز اعتماد در سه سناریو اصلی به شرح زیر است:
+
+\subsubsection{گره صادق با رفتار عادی}
+
+برای یک گره صادق که توزیع داده‌اش نسبتاً عادی است، انتظار داریم $c_i^t \approx 0.7$ تا $1$ و $m_i^t \approx 1$ باشد. در نتیجه $s_i^t \approx 0.7$ تا $1$ و امتیاز اعتماد به تدریج به سمت این مقدار همگرا می‌شود.
+
+\subsubsection{گره مخرب با حمله جهت‌معکوس‌سازی}
+
+برای این گره، $c_i^t < 0$ خواهد بود، بنابراین $s_i^t = 0$. با گذشت چند دور، امتیاز اعتماد گره کاهش می‌یابد:
+
+\begin{equation}
+    \tau_i^{t+k} \approx \gamma^k \tau_i^t
+    \label{eq:trust_decay}
+\end{equation}
+
+پس از $k = \lceil \log_\gamma(\tau_{\min} / \tau_i^0) \rceil$ دور، امتیاز اعتماد گره به کف $\tau_{\min}$ می‌رسد.
+
+\subsubsection{گره با رفتار نویزی}
+
+برای گره‌ای که نویز تصادفی ارسال می‌کند، $c_i^t$ در هر دور تصادفی است و $m_i^t$ ممکن است کوچک باشد (اگر نویز بزرگ باشد). در نتیجه امتیاز اعتماد این گره به یک مقدار متوسط همگرا می‌شود که کمتر از گره‌های صادق است.
+
+\begin{nttheorem}
+\label{theorem:convergence_trust}
+    فرض کنید در هر دور، امتیاز خام گره $i$ به‌طور مستقل از توزیع $P_i$ نمونه‌برداری می‌شود با انتظار $\mathbb{E}[s_i] = \bar{s}_i$. آنگاه امتیاز اعتماد $\tau_i^t$ با احتمال یک به $\bar{s}_i$ همگرا می‌شود:
+    \begin{equation}
+        \lim_{t \to \infty} \tau_i^t = \bar{s}_i \quad \text{a.s.}
+        \label{eq:trust_convergence}
+    \end{equation}
+\end{nttheorem}
+
+\begin{proof}
+    از بسط معادله \eqref{eq:trust_update} داریم:
+    \begin{equation*}
+        \tau_i^t = \gamma^t \tau_i^0 + (1-\gamma) \sum_{k=1}^{t} \gamma^{t-k} s_i^k
+    \end{equation*}
+    با گذشت $t \to \infty$، جمله اول به صفر میل می‌کند. جمله دوم طبق قانون اعداد بزرگ به $(1-\gamma) \cdot \frac{1}{1-\gamma} \cdot \bar{s}_i = \bar{s}_i$ همگرا می‌شود.
+\end{proof}
+
+\subsection{انتخاب پارامترها}
+
+پارامترهای اصلی روش \gls{TWAC} و توصیه‌های انتخاب آن‌ها در جدول \ref{tab:hyperparams} آمده است.
+
+\begin{table}[t]
+    \centering
+    \renewcommand{\arraystretch}{1.8}
+    \caption{پارامترهای روش \gls{TWAC} و مقادیر پیشنهادی}
+    \label{tab:hyperparams}
+    \begin{tabular}{clcc}
+        \toprule
+        \textbf{نماد} & \textbf{توضیح} & \textbf{مقدار پیشنهادی} & \textbf{بازه مجاز} \\
+        \midrule
+        $\gamma$ & اینرسی امتیاز اعتماد & $0.7$ & $[0.5, 0.9]$ \\
+        $\alpha$ & حساسیت بزرگی & $2.0$ & $[1.0, 5.0]$ \\
+        $\beta$ & آستانه تحمل بزرگی & $2.0$ & $[1.5, 3.0]$ \\
+        $\mu$ & اینرسی جهت مرجع & $0.9$ & $[0.8, 0.95]$ \\
+        $\tau_{\min}$ & کف اعتماد & $0.1$ & $[0.01, 0.2]$ \\
+        $\delta$ & ضریب کاهش گره کُند & $0.98$ & $[0.95, 0.99]$ \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+
+\section{مدیریت گره‌های کُند}
+\label{sec:straggler_handling}
+
+در یک محیط ابری واقعی، برخی گره‌ها به دلیل محدودیت‌های محاسباتی یا شبکه‌ای نمی‌توانند پیش از پایان زمان مهلت پاسخ دهند. روش \gls{TWAC} این موضوع را با دو مکانیزم مدیریت می‌کند:
+
+\subsection{تعیین زمان مهلت تطبیقی}
+
+زمان مهلت $T_{\max}$ به صورت زیر تعیین می‌شود:
+
+\begin{equation}
+    T_{\max}^t = \kappa \cdot \text{median}_{i \in S_t}(T_i^{exp})
+    \label{eq:timeout}
+\end{equation}
+
+که $T_i^{exp}$ زمان مورد انتظار برای گره $i$ (بر اساس تاریخچه پاسخ‌دهی آن) و $\kappa > 1$ ضریب اطمینان است. انتخاب میانه به جای میانگین موجب می‌شود که گره‌های بسیار کُند (که ممکن است دچار خرابی موقت باشند) زمان مهلت را به شدت افزایش ندهند.
+
+\subsection{کاهش تدریجی امتیاز اعتماد گره‌های کُند}
+
+برای گره‌هایی که در یک دور پاسخ نمی‌دهند ($i \in S_t \setminus R_t$)، امتیاز اعتماد با ضریب کوچکی کاهش می‌یابد:
+
+\begin{equation}
+    \tau_i^t = \delta \cdot \tau_i^{t-1}, \quad \delta \in (0, 1)
+    \label{eq:straggler_decay}
+\end{equation}
+
+انتخاب $\delta$ نزدیک به ۱ (مثلاً $\delta = 0.98$) موجب می‌شود که یک بار عدم پاسخ‌دهی تأثیر چندانی بر امتیاز اعتماد نداشته باشد، اما عدم پاسخ‌دهی مستمر امتیاز را به تدریج کاهش دهد.
+
+\begin{info}
+    این طراحی به این دلیل مهم است که در یک محیط ابری واقعی، یک مکث موقت (مثل یک \lr{garbage collection} طولانی در ماشین مجازی یا یک اختلال گذرای شبکه) نباید موجب محرومیت دائمی گره از فرایند یادگیری شود. با $\delta = 0.98$، حتی ۵۰ دور عدم پاسخ‌دهی متوالی امتیاز را تنها به $0.98^{50} \approx 0.36$ کاهش می‌دهد که هنوز بالاتر از $\tau_{\min}$ است.
+\end{info}
+
+
+\section{تحلیل پیچیدگی}
+\label{sec:complexity}
+
+\subsection{پیچیدگی محاسباتی}
+
+در هر دور ارتباطی، اعمال زیر در سرور انجام می‌شود:
+
+\begin{enumerate}
+    \item محاسبه نرم به‌روزرسانی هر گره: $O(|R_t| \cdot d)$
+    \item محاسبه میانه نرم‌ها: $O(|R_t| \log |R_t|)$
+    \item محاسبه شباهت کسینوسی: $O(|R_t| \cdot d)$
+    \item به‌روزرسانی امتیازات اعتماد: $O(|R_t|)$
+    \item تجمیع وزن‌دار: $O(|R_t| \cdot d)$
+    \item به‌روزرسانی جهت مرجع: $O(|R_t| \cdot d)$
+\end{enumerate}
+
+بنابراین پیچیدگی کلی $O(|R_t| \cdot d) = O(Kd)$ است که با پیچیدگی \lr{FedAvg} برابر است.
+
+\subsection{مقایسه پیچیدگی}
+
+\begin{table}[t]
+    \centering
+    \renewcommand{\arraystretch}{1.8}
+    \caption{مقایسه پیچیدگی محاسباتی روش‌های مختلف تجمیع}
+    \label{tab:complexity}
+    \begin{tabular}{lcc}
+        \toprule
+        \textbf{روش} & \textbf{پیچیدگی زمانی} & \textbf{پیچیدگی فضایی} \\
+        \midrule
+        \lr{FedAvg}                 & $O(nd)$        & $O(d)$    \\
+        میانه                        & $O(nd)$        & $O(nd)$   \\
+        میانگین کوتاه‌شده            & $O(nd \log n)$ & $O(nd)$   \\
+        \lr{Krum}                   & $O(n^2 d)$     & $O(n^2)$  \\
+        \lr{Bulyan}                 & $O(n^2 d)$     & $O(n^2)$  \\
+        \textbf{\gls{TWAC} (این پژوهش)}  & $\mathbf{O(nd)}$ & $\mathbf{O(d + n)}$ \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+جدول \ref{tab:complexity} نشان می‌دهد که \gls{TWAC} تنها روشی است که با پیچیدگی زمانی $O(nd)$ (برابر با \lr{FedAvg}) قابلیت مقاوم‌سازی در برابر گره‌های مخرب را دارد. فضای اضافه $O(n)$ برای نگهداری امتیازات اعتماد و جهت مرجع صرف می‌شود که ناچیز است.
+
+
+\section{بحث در مورد نوآوری}
+\label{sec:innovation_discussion}
+
+\subsection{تفاوت با \lr{FedAvg}}
+
+\lr{FedAvg} با وزن‌دهی صرفاً بر اساس تعداد نمونه، هیچ تمایزی بین گره‌های صادق و مخرب قائل نمی‌شود. \gls{TWAC} با جایگزینی این وزن‌دهی ساده با امتیازات اعتماد تاریخی، یک لایه امنیتی تطبیقی اضافه می‌کند.
+
+\subsection{تفاوت با \lr{Krum} و میانگین کوتاه‌شده}
+
+\lr{Krum} و میانگین کوتاه‌شده هر دور را مستقل از دورهای قبل ارزیابی می‌کنند. این موجب می‌شود که یک به‌روزرسانی غیرعادی موقت (مثلاً ناشی از یک دسته داده نامتعادل) همان تأثیر منفی را داشته باشد که یک حمله واقعی. در \gls{TWAC}، تاریخچه رفتار گره در ارزیابی آن نقش دارد، بنابراین یک خرابی گذرا تأثیر کمی دارد.
+
+علاوه بر این، \lr{Krum} پیچیدگی $O(n^2 d)$ دارد که در محیط‌های ابری با هزینه مستقیم همراه است. \gls{TWAC} با پیچیدگی $O(nd)$، یک ضریب $O(n)$ کمتر هزینه دارد.
+
+\subsection{تفاوت با \lr{FLTrust}}
+
+\lr{FLTrust} نیز از مفهوم مشابهی استفاده می‌کند، اما به یک مجموعه داده اعتبارسنجی در سرور نیاز دارد. \gls{TWAC} بدون هیچ داده اضافه‌ای در سرور، صرفاً بر اساس ساختار هندسی به‌روزرسانی‌های دریافتی و تاریخچه آن‌ها تصمیم می‌گیرد.
+
+سودوکد کامل الگوریتم \gls{TWAC} در \autoref{alg:twac} آمده است.
+
+\begin{algorithm}[t]
+    \caption{الگوریتم \lr{TWAC}}
+    \label{alg:twac}
+    \begin{latin}
+        \raggedright
+        \textbf{Input}: $N$ nodes, $K$ nodes per round, $T$ rounds, hyperparameters $\gamma, \alpha, \beta, \mu, \tau_{\min}, \delta$.\\
+        \vspace{2mm}\textbf{Output}: Global model $w^T$.
+        \begin{algorithmic}[1]
+            \STATE\vspace{2mm} Initialize $w^0$ randomly, $\tau_i^0 = 1$ for all $i$, $\bar{\Delta}^0 = \mathbf{0}$
+            \FOR{$t = 1, 2, \ldots, T$}
+                \STATE\vspace{1mm} $S_t \leftarrow$ select $K$ nodes uniformly at random
+                \STATE\vspace{1mm} Broadcast $w^t$ to all $i \in S_t$
+                \STATE\vspace{1mm} Each node $i \in S_t$ trains locally and computes $\Delta_i^t$
+                \STATE\vspace{1mm} $R_t \leftarrow$ nodes that respond before timeout
+                \IF{$|R_t| < K_{\min}$}
+                    \STATE\vspace{1mm} Skip round; continue
+                \ENDIF
+                \STATE\vspace{1mm} $\text{med} \leftarrow \text{median}_{i \in R_t}(\|\Delta_i^t\|)$
+                \FOR{each $i \in R_t$}
+                    \STATE\vspace{1mm} $c_i^t \leftarrow \text{CosSim}(\Delta_i^t, \bar{\Delta}^{t-1})$
+                    \STATE\vspace{1mm} $m_i^t \leftarrow \exp(-\alpha \cdot \max(0, \|\Delta_i^t\| / \text{med} - \beta))$
+                    \STATE\vspace{1mm} $s_i^t \leftarrow \text{ReLU}(c_i^t) \cdot m_i^t$
+                    \STATE\vspace{1mm} $\tau_i^t \leftarrow \gamma \cdot \tau_i^{t-1} + (1 - \gamma) \cdot s_i^t$
+                \ENDFOR
+                \FOR{each $i \in S_t \setminus R_t$}
+                    \STATE\vspace{1mm} $\tau_i^t \leftarrow \delta \cdot \tau_i^{t-1}$
+                \ENDFOR
+                \STATE\vspace{1mm} $\hat{\tau}_i^t \leftarrow \max(\tau_i^t, \tau_{\min})$ for all $i \in R_t$
+                \STATE\vspace{1mm} $\hat{w}_i^t \leftarrow \hat{\tau}_i^t \cdot n_i / \sum_{j \in R_t} \hat{\tau}_j^t \cdot n_j$
+                \STATE\vspace{1mm} $w^{t+1} \leftarrow w^t + \sum_{i \in R_t} \hat{w}_i^t \cdot \Delta_i^t$
+                \STATE\vspace{1mm} Update $\bar{\Delta}^t$ using Eq.~\eqref{eq:reference_update}
+            \ENDFOR
+            \RETURN $w^T$
+        \end{algorithmic}
+    \end{latin}
+\end{algorithm}
